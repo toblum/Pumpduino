@@ -176,20 +176,25 @@ void updateDisplay()
     display.drawString(128, 40, String(steering_mode));
 
     display.display();
-
     display_refresh = false;
+
+    // TODO: Show WiFi.RSSI()
 }
 
-void showMessage(String line1, String line2, String line3) {
+void showMessage(String line1, String line2, String line3)
+{
     display.clear();
     display.setTextAlignment(TEXT_ALIGN_CENTER);
     display.setFont(ArialMT_Plain_16);
 
-    if (line3.length() > 0) {
+    if (line3.length() > 0)
+    {
         display.drawString(64, 0, String(line1));
         display.drawString(64, 20, String(line2));
         display.drawString(64, 40, String(line3));
-    } else {
+    }
+    else
+    {
         display.drawString(64, 0, String(line1));
         display.drawString(64, 32, String(line2));
     }
@@ -197,7 +202,7 @@ void showMessage(String line1, String line2, String line3) {
 }
 
 // *************************************************
-// Relais functions
+// RC Switch functions
 // *************************************************
 void setRCSwitchState(bool state)
 {
@@ -229,6 +234,15 @@ void configModeCallback(WiFiManager *myWiFiManager)
     showMessage("Config mode", myWiFiManager->getConfigPortalSSID(), "");
 }
 
+String getLocalIP()
+{
+    String ipString = String(WiFi.localIP()[0]);
+    for (byte octet = 1; octet < 4; ++octet)
+    {
+        ipString += '.' + String(WiFi.localIP()[octet]);
+    }
+    return ipString;
+}
 
 // *************************************************
 // Steering functions
@@ -438,7 +452,8 @@ void setup()
 
     //if you get here you have connected to the WiFi
     Serial.println("connected...yeey :)");
-    showMessage("Connected ...", String(WiFi.localIP()), "");
+    showMessage("Connected ...", getLocalIP(), "");
+    WiFi.hostname("pumpduino");
     delay(2000);
 }
 
