@@ -2,6 +2,8 @@
 
 #include <Ticker.h>
 
+#include <ESP8266WiFi.h>
+
 // *************************************************
 // Definitions
 // *************************************************
@@ -67,6 +69,13 @@ SSD1306 display(0x3c, D2, D1);
 // *************************************************
 #include <RCSwitch.h>
 RCSwitch rc_switch = RCSwitch();
+
+// *************************************************
+// Init: ESPAsyncWiFiManager
+// *************************************************
+#include <DNSServer.h>
+#include <ESP8266WebServer.h>
+#include <WiFiManager.h>
 
 // *************************************************
 // Helper functions
@@ -172,6 +181,22 @@ void updateDisplay()
     display_refresh = false;
 }
 
+void showMessage(String line1, String line2, String line3) {
+    display.clear();
+    display.setTextAlignment(TEXT_ALIGN_CENTER);
+    display.setFont(ArialMT_Plain_16);
+
+    if (line3.length() > 0) {
+        display.drawString(64, 0, String(line1));
+        display.drawString(64, 20, String(line2));
+        display.drawString(64, 40, String(line3));
+    } else {
+        display.drawString(64, 0, String(line1));
+        display.drawString(64, 32, String(line2));
+    }
+    display.display();
+}
+
 // *************************************************
 // Relais functions
 // *************************************************
@@ -192,6 +217,19 @@ void setRCSwitchState(bool state)
         }
     }
 }
+
+// *************************************************
+// WiFi functions
+// *************************************************
+void configModeCallback(WiFiManager *myWiFiManager)
+{
+    Serial.println("Entered config mode");
+    Serial.println(WiFi.softAPIP());
+    //if you used auto generated SSID, print it
+    Serial.println(myWiFiManager->getConfigPortalSSID());
+    showMessage("Config mode", myWiFiManager->getConfigPortalSSID(), "");
+}
+
 
 // *************************************************
 // Steering functions
@@ -317,10 +355,7 @@ void setup()
     display.init();
     // display.flipScreenVertically();
     display.setContrast(255);
-    display.setFont(ArialMT_Plain_16);
-    display.setTextAlignment(TEXT_ALIGN_CENTER);
-    display.drawString(64, 0, "Pumpduino v2");
-    display.drawString(64, 32, "Starting ...");
+    showMessage("Pumpduino v2", "Connecting ...", "");
     display.display();
 
     // Init ticker for display update
@@ -383,6 +418,28 @@ void setup()
     Serial.print("Device 2 (Raum) Resolution: ");
     Serial.print(sensors.getResolution(sensor_raum), DEC);
     Serial.println();
+
+    // ========================================
+    // Initializing WiFiManager
+    // ========================================
+    WiFiManager wifiManager;
+    //reset settings - for testing
+    //wifiManager.resetSettings();
+
+    //set callback that gets called when connecting to previous WiFi fails, and enters Access Point mode
+    wifiManager.setAPCallback(configModeCallback);
+
+    if (!wifiManager.autoConnect("PumpduinoAP"))
+    {
+        Serial.println("failed to connect and hit timeout");
+        //reset and try again, or maybe put it to deep sleep
+        ESP.reset();
+        delay(1000);
+    }
+
+    //if you get here you have connected to the WiFi
+    Serial.println("connected...yeey :)");
+    showMessage("Connected ...", "", "");
 }
 
 void loop()
