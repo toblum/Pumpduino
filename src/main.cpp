@@ -1,8 +1,5 @@
 #include <Arduino.h>
 
-#include <OneWire.h>
-#include <DallasTemperature.h>
-
 #include <Ticker.h>
 
 // *************************************************
@@ -45,8 +42,10 @@ static unsigned long tsPumpenaktivierung = 0;
 static unsigned long tsPumpendeaktivierung = 0;
 
 // *************************************************
-// Temperature sensors
+// Init: Temperature sensors
 // *************************************************
+#include <OneWire.h>
+#include <DallasTemperature.h>
 #define ONE_WIRE_BUS D4
 #define TEMPERATURE_PRECISION 10
 
@@ -58,10 +57,16 @@ DallasTemperature sensors(&oneWire);
 DeviceAddress sensor_vorlauf, sensor_ruecklauf, sensor_raum;
 
 // *************************************************
-// OLED display (SSD1306)
+// Init: OLED display (SSD1306)
 // *************************************************
 #include <SSD1306.h>
 SSD1306 display(0x3c, D2, D1);
+
+// *************************************************
+// Init: RC-Switch (433 MHz sender)
+// *************************************************
+#include <RCSwitch.h>
+RCSwitch rc_switch = RCSwitch();
 
 // *************************************************
 // Helper functions
@@ -170,23 +175,21 @@ void updateDisplay()
 // *************************************************
 // Relais functions
 // *************************************************
-void switch1(bool state)
+void setRCSwitchState(bool state)
 {
     if (switch1_state != state)
     {
         switch1_state = state;
-        // if (state)
-        // {
-        //     // Switch ON
-        //     digitalWrite(statusLedPin, HIGH); // sets the relais on
-        //     mySwitch.switchOn("10000", "01000");
-        // }
-        // else
-        // {
-        //     // Switch OFF
-        //     digitalWrite(statusLedPin, LOW); // sets the relais off
-        //     mySwitch.switchOff("10000", "01000");
-        // }
+        if (state)
+        {
+            // Switch ON
+            rc_switch.switchOn("10000", "01000");
+        }
+        else
+        {
+            // Switch OFF
+            rc_switch.switchOff("10000", "01000");
+        }
     }
 }
 
@@ -203,13 +206,13 @@ void statemachine()
         // Betriebsmodus OFF
         if (working_mode == WMODEOFF)
         {
-            switch1(false); // Turns switch 1 off
+            setRCSwitchState(false); // Turns switch 1 off
         }
 
         // Betriebsmodus ON
         if (working_mode == WMODEON)
         {
-            switch1(true); // Turns switch 1 on
+            setRCSwitchState(true); // Turns switch 1 on
         }
     }
 
@@ -225,13 +228,13 @@ void statemachine()
                 // Rücklauftemperatur nicht ausreichend, Durchlauf starten
                 steering_mode = SMODEPUMPEAKTIV;
                 tsPumpenaktivierung = millis();
-                switch1(true);
+                setRCSwitchState(true);
             }
             else
             {
                 // Temperatur ausreichend, warten
                 steering_mode = SMODETIMERACTIVE;
-                switch1(false);
+                setRCSwitchState(false);
             }
         }
 
@@ -243,7 +246,7 @@ void statemachine()
                 // Rücklauftemperatur nicht ausreichend, Durchlauf starten
                 steering_mode = SMODEPUMPEAKTIV;
                 tsPumpenaktivierung = millis();
-                switch1(true);
+                setRCSwitchState(true);
             }
         }
 
@@ -275,7 +278,7 @@ void statemachine()
             if (tempErreicht || tsPumpenaktivierung + MAXIMALPUMPDAUER <= millis())
             {
                 // Temperatur erreicht, Pumpe abschalten
-                switch1(false);
+                setRCSwitchState(false);
                 steering_mode = SMODEPUMPENSCHUTZ;
                 tsPumpenaktivierung = 0;
                 tsPumpendeaktivierung = millis();
@@ -308,6 +311,7 @@ void setup()
     Serial.begin(9600);
     Serial.println("Pumpduino v2");
 
+    // ========================================
     // Initializing OLED display
     // ========================================
     display.init();
@@ -319,10 +323,18 @@ void setup()
     display.drawString(64, 32, "Starting ...");
     display.display();
 
+    // Init ticker for display update
+    ticker_display.attach(1.0, tickerUpdateDisplay);
+
+    // ========================================
+    // Initializing RS Switch
+    // ========================================
+    // Transmitter is connected to pin D3
+    rc_switch.enableTransmit(D3);
+
+    // ========================================
     // Initializing OneWire temperature sensors
     // ========================================
-    // lcd.setCursor(0, 1);
-    // lcd.print("Init sensors");
     Serial.println("Init Sensors");
     sensors.begin();
 
@@ -371,9 +383,6 @@ void setup()
     Serial.print("Device 2 (Raum) Resolution: ");
     Serial.print(sensors.getResolution(sensor_raum), DEC);
     Serial.println();
-
-    // Init ticker for display update
-    ticker_display.attach(1.0, tickerUpdateDisplay);
 }
 
 void loop()
