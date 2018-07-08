@@ -4,6 +4,7 @@
 #include <DallasTemperature.h>
 
 #include <Ticker.h>
+
 // *************************************************
 // Definitions
 // *************************************************
@@ -164,33 +165,6 @@ void updateDisplay()
 
     Serial.println("Updated display");
     display_refresh = false;
-
-    //    // Print working mode
-    //    lcd.setCursor (12,0);
-    //    if (working_mode == WMODEOFF) {
-    //      lcd.print("OFF ");
-    //    }
-    //    if (working_mode == WMODEON) {
-    //      lcd.print("ON  ");
-    //    }
-    //    if (working_mode == WMODEAUTO) {
-    //      lcd.print("AUTO");
-    //    }
-    //    if (working_mode == WMODEONCE) {
-    //      lcd.print("ONCE");
-    //    }
-
-    //    // Print relais mode
-    //    lcd.setCursor(15,1);
-    //    if (switch1_state) {
-    //      lcd.print("*");
-    //    } else {
-    //      lcd.print(" ");
-    //    }
-
-    //    // Print steering mode
-    //    lcd.setCursor(12,1);
-    //    lcd.print(steering_mode);
 }
 
 // *************************************************
@@ -286,7 +260,6 @@ void statemachine()
         // Pumpe aktiv, Minimalpumpdauer abgelaufen, warten auf Temperaturerreichung, oder MAXIMALPUMPDAUER
         if (steering_mode == SMODEPUMPENACHLAUF)
         {
-
             bool tempErreicht = false;
 
             if (calc_mode == CALCMODETARGET)
