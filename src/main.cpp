@@ -177,7 +177,6 @@ void updateDisplay()
 
     display.display();
 
-    Serial.println("Updated display");
     display_refresh = false;
 }
 
@@ -356,7 +355,7 @@ void setup()
     // display.flipScreenVertically();
     display.setContrast(255);
     showMessage("Pumpduino v2", "Connecting ...", "");
-    display.display();
+    delay(1000);
 
     // Init ticker for display update
     ticker_display.attach(1.0, tickerUpdateDisplay);
@@ -439,7 +438,8 @@ void setup()
 
     //if you get here you have connected to the WiFi
     Serial.println("connected...yeey :)");
-    showMessage("Connected ...", "", "");
+    showMessage("Connected ...", String(WiFi.localIP()), "");
+    delay(2000);
 }
 
 void loop()
