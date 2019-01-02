@@ -1,8 +1,7 @@
 #include <Arduino.h>
-
 #include <Ticker.h>
-
 #include <ESP8266WiFi.h>
+
 
 // *************************************************
 // Definitions
@@ -21,27 +20,24 @@
 #define CALCMODETARGET 0     // Abschaltung durch Zieltemperatur Rücklauf
 #define CALCMODEDIFFERENCE 1 // Abschaltung durch Temperaturunterschied Vorlauf Rücklauf
 
+
 // *************************************************
 // Globals
 // *************************************************
 float temp_vorlauf, temp_ruecklauf, temp_raum;
 Ticker ticker_display;
 bool display_refresh = false;
+Ticker ticker_temperatures;
+bool temperatures_refresh = true;
 bool switch1_state;
 
 int working_mode = WMODEAUTO;      // Standardbetriebsmodus == AUTO
 int steering_mode = SMODEBASE;     // Steuerungsmodus == SMODEBASE
 int last_working_mode = WMODEAUTO; // Merker für ONCE Betriebsmodus
-int calc_mode = CALCMODETARGET;    // Modus Zieltemperatur
-
-float RUECKTARGETTEMP = 35.0;
-float TARGETDIFFERENCE = 7.0;
-unsigned long MINIMALPUMPDAUER = 60000;   //  1 Minute
-unsigned long MAXIMALPUMPDAUER = 1200000; // 20 Minuten
-unsigned long PUMPENSCHUTZZEIT = 1800000; // 30 Minuten
 
 static unsigned long tsPumpenaktivierung = 0;
 static unsigned long tsPumpendeaktivierung = 0;
+
 
 // *************************************************
 // Init: Temperature sensors
@@ -58,11 +54,13 @@ DallasTemperature sensors(&oneWire);
 // arrays to hold device addresses
 DeviceAddress sensor_vorlauf, sensor_ruecklauf, sensor_raum;
 
+
 // *************************************************
 // Init: OLED display (SSD1306)
 // *************************************************
 #include <SSD1306.h>
 SSD1306 display(0x3c, D2, D1);
+
 
 // *************************************************
 // Init: RC-Switch (433 MHz sender)
@@ -70,12 +68,14 @@ SSD1306 display(0x3c, D2, D1);
 #include <RCSwitch.h>
 RCSwitch rc_switch = RCSwitch();
 
+
 // *************************************************
-// Init: ESPAsyncWiFiManager
+// Init: WiFiManager
 // *************************************************
 #include <DNSServer.h>
 #include <ESP8266WebServer.h>
 #include <WiFiManager.h>
+
 
 // *************************************************
 // Init: ESPWebServer
@@ -84,9 +84,23 @@ ESP8266WebServer server(80);
 
 
 // *************************************************
+// Init: ESP_EEPROM
+// *************************************************
+#include <ESP_EEPROM.h>
+struct EEPROMSettingsStruct
+{
+    int calc_mode;
+    float RUECKTARGETTEMP;
+    float TARGETDIFFERENCE;
+    unsigned long MINIMALPUMPDAUER;
+    unsigned long MAXIMALPUMPDAUER;
+    unsigned long PUMPENSCHUTZZEIT;
+} settingsvar;
+
+
+// *************************************************
 // Helper functions
 // *************************************************
-
 // function to print a device address
 void printAddress(DeviceAddress deviceAddress)
 {
@@ -99,9 +113,15 @@ void printAddress(DeviceAddress deviceAddress)
     }
 }
 
+
 // *************************************************
 // Temperature functions
 // *************************************************
+void tickerUpdateTemperatures()
+{
+    temperatures_refresh = true;
+}
+
 // Get temperatures, store them in global variables
 void getTemperatures()
 {
@@ -128,7 +148,10 @@ void getTemperatures()
     {
         temp_raum = tempC;
     }
+
+    temperatures_refresh = false;
 }
+
 
 // *************************************************
 // Display functions
@@ -207,6 +230,7 @@ void showMessage(String line1, String line2, String line3)
     display.display();
 }
 
+
 // *************************************************
 // RC Switch functions
 // *************************************************
@@ -227,6 +251,7 @@ void setRCSwitchState(bool state)
         }
     }
 }
+
 
 // *************************************************
 // WiFi functions
@@ -249,6 +274,7 @@ String getLocalIP()
     }
     return ipString;
 }
+
 
 // *************************************************
 // Steering functions
@@ -280,7 +306,7 @@ void statemachine()
         // Steuerung im Grundzustand, entscheiden was zu tun ist
         if (steering_mode == SMODEBASE)
         {
-            if (temp_ruecklauf < RUECKTARGETTEMP)
+            if (temp_ruecklauf < settingsvar.RUECKTARGETTEMP)
             {
                 // Rücklauftemperatur nicht ausreichend, Durchlauf starten
                 steering_mode = SMODEPUMPEAKTIV;
@@ -298,7 +324,7 @@ void statemachine()
         // Warten auf Pumpenaktivierung
         if (steering_mode == SMODETIMERACTIVE)
         {
-            if (temp_ruecklauf < RUECKTARGETTEMP)
+            if (temp_ruecklauf < settingsvar.RUECKTARGETTEMP)
             {
                 // Rücklauftemperatur nicht ausreichend, Durchlauf starten
                 steering_mode = SMODEPUMPEAKTIV;
@@ -310,7 +336,7 @@ void statemachine()
         // Pumpe aktiv, warten auf Ablauf Minimalpumpdauer
         if (steering_mode == SMODEPUMPEAKTIV)
         {
-            if (tsPumpenaktivierung + MINIMALPUMPDAUER <= millis())
+            if (tsPumpenaktivierung + settingsvar.MINIMALPUMPDAUER <= millis())
             {
                 // Minimalpumpdauer abgelaufen
                 steering_mode = SMODEPUMPENACHLAUF;
@@ -322,17 +348,17 @@ void statemachine()
         {
             bool tempErreicht = false;
 
-            if (calc_mode == CALCMODETARGET)
+            if (settingsvar.calc_mode == CALCMODETARGET)
             {
-                tempErreicht = (temp_ruecklauf >= RUECKTARGETTEMP) ? true : false;
+                tempErreicht = (temp_ruecklauf >= settingsvar.RUECKTARGETTEMP) ? true : false;
             }
-            if (calc_mode == CALCMODEDIFFERENCE)
+            if (settingsvar.calc_mode == CALCMODEDIFFERENCE)
             {
                 float tempDiff = temp_ruecklauf - temp_vorlauf;
-                tempErreicht = (abs(tempDiff) <= TARGETDIFFERENCE) ? true : false;
+                tempErreicht = (abs(tempDiff) <= settingsvar.TARGETDIFFERENCE) ? true : false;
             }
 
-            if (tempErreicht || tsPumpenaktivierung + MAXIMALPUMPDAUER <= millis())
+            if (tempErreicht || tsPumpenaktivierung + settingsvar.MAXIMALPUMPDAUER <= millis())
             {
                 // Temperatur erreicht, Pumpe abschalten
                 setRCSwitchState(false);
@@ -353,7 +379,7 @@ void statemachine()
         // Pumpe inaktiv, Schutzzeit bis nächste Aktivierung
         if (steering_mode == SMODEPUMPENSCHUTZ)
         {
-            if (tsPumpendeaktivierung + PUMPENSCHUTZZEIT <= millis())
+            if (tsPumpendeaktivierung + settingsvar.PUMPENSCHUTZZEIT <= millis())
             {
                 // Pumpenschutzzeit abgelaufen
                 steering_mode = SMODETIMERACTIVE;
@@ -362,7 +388,21 @@ void statemachine()
     }
 }
 
-void sendStatusJSON() {
+
+// *************************************************
+// WebServer functions
+// *************************************************
+void commitSettings()
+{
+    EEPROM.put(0, settingsvar);
+
+    // write the data to EEPROM
+    boolean ok = EEPROM.commit();
+    Serial.println((ok) ? "Commit OK" : "Commit failed");
+}
+
+void sendStatusJSON()
+{
     String response = "{";
     response += "temp_vorlauf:" + String(temp_vorlauf) + ",";
     response += "temp_ruecklauf:" + String(temp_ruecklauf) + ",";
@@ -370,30 +410,36 @@ void sendStatusJSON() {
     response += "working_mode:" + String(working_mode) + ",";
     response += "last_working_mode:" + String(last_working_mode) + ",";
     response += "steering_mode:" + String(steering_mode) + ",";
-    response += "calc_mode:" + String(calc_mode) + ",";
+    response += "calc_mode:" + String(settingsvar.calc_mode) + ",";
     response += "switch1_state:" + String(switch1_state) + ",";
     response += "knock_state:0,";
-    response += "RUECKTARGETTEMP:" + String(RUECKTARGETTEMP) + ",";
-    response += "TARGETDIFFERENCE:" + String(TARGETDIFFERENCE) + ",";
-    response += "MINIMALPUMPDAUER:" + String(MINIMALPUMPDAUER) + ",";
-    response += "MAXIMALPUMPDAUER:" + String(MAXIMALPUMPDAUER) + ",";
-    response += "PUMPENSCHUTZZEIT:" + String(PUMPENSCHUTZZEIT) + "";
+    response += "RUECKTARGETTEMP:" + String(settingsvar.RUECKTARGETTEMP) + ",";
+    response += "TARGETDIFFERENCE:" + String(settingsvar.TARGETDIFFERENCE) + ",";
+    response += "MINIMALPUMPDAUER:" + String(settingsvar.MINIMALPUMPDAUER) + ",";
+    response += "MAXIMALPUMPDAUER:" + String(settingsvar.MAXIMALPUMPDAUER) + ",";
+    response += "PUMPENSCHUTZZEIT:" + String(settingsvar.PUMPENSCHUTZZEIT) + "";
     response += "}";
     server.send(200, "application/json", response);
 }
 
-String getValueFromQuery() {
-    if (server.args() > 0) {
+String getValueFromQuery()
+{
+    if (server.args() > 0)
+    {
         return String(server.arg(0));
     }
 }
 
 
+// *************************************************
+// SETUP
+// *************************************************
 void setup()
 {
     // start serial port
     Serial.begin(9600);
     Serial.println("Pumpduino v2");
+
 
     // ========================================
     // Initializing OLED display
@@ -407,15 +453,19 @@ void setup()
     // Init ticker for display update
     ticker_display.attach(1.0, tickerUpdateDisplay);
 
+
     // ========================================
     // Initializing RS Switch
     // ========================================
     // Transmitter is connected to pin D3
     rc_switch.enableTransmit(D3);
 
+
     // ========================================
     // Initializing OneWire temperature sensors
     // ========================================
+    ticker_temperatures.attach(2.0, tickerUpdateTemperatures);
+
     Serial.println("Init Sensors");
     sensors.begin();
 
@@ -452,6 +502,7 @@ void setup()
     // set the resolution to 9 bit
     sensors.setResolution(sensor_vorlauf, TEMPERATURE_PRECISION);
     sensors.setResolution(sensor_ruecklauf, TEMPERATURE_PRECISION);
+    sensors.setResolution(sensor_raum, TEMPERATURE_PRECISION);
 
     Serial.print("Device 0 (Vorlauf) Resolution: ");
     Serial.print(sensors.getResolution(sensor_vorlauf), DEC);
@@ -464,6 +515,7 @@ void setup()
     Serial.print("Device 2 (Raum) Resolution: ");
     Serial.print(sensors.getResolution(sensor_raum), DEC);
     Serial.println();
+
 
     // ========================================
     // Initializing WiFiManager
@@ -488,6 +540,31 @@ void setup()
     showMessage("Connected ...", getLocalIP(), "");
     WiFi.hostname("pumpduino");
     delay(2000);
+
+
+    // *************************************************
+    // Init: ESP_EEPROM
+    // *************************************************
+    EEPROM.begin(sizeof(EEPROMSettingsStruct));
+
+    if (EEPROM.percentUsed() >= 0)
+    {
+        EEPROM.get(0, settingsvar);
+        Serial.println("EEPROM has data from a previous run.");
+        Serial.print(EEPROM.percentUsed());
+        Serial.println("% of ESP flash space currently used");
+    }
+    else
+    {
+        Serial.println("No EEPROM settings so far, using defaults.");
+        settingsvar.calc_mode = CALCMODETARGET;
+        settingsvar.RUECKTARGETTEMP = 35.0;
+        settingsvar.TARGETDIFFERENCE = 7.0;
+        settingsvar.MINIMALPUMPDAUER = 60000;   //  1 Minute
+        settingsvar.MAXIMALPUMPDAUER = 1200000; // 20 Minuten
+        settingsvar.PUMPENSCHUTZZEIT = 1800000; // 30 Minuten
+    }
+
 
     // ========================================
     // Initializing WebServer
@@ -522,49 +599,65 @@ void setup()
     });
     server.on("/setcalc", []() {
         String value = "" + server.arg("value");
-        if (value != "") {
-            calc_mode = value.toInt();
-            Serial.printf("setcalc: %d\n", calc_mode);
+        if (value != "")
+        {
+            int val = value.toInt();
+            if (val == CALCMODETARGET || val == CALCMODEDIFFERENCE)
+            {
+                settingsvar.calc_mode = val;
+                Serial.printf("calc_mode: %d\n", settingsvar.calc_mode);
+                commitSettings();
+            }
         }
         sendStatusJSON();
     });
     server.on("/settt", []() {
         String value = "" + server.arg("value");
-        if (value != "") {
-            RUECKTARGETTEMP = value.toFloat();
-            Serial.printf("RUECKTARGETTEMP: %f\n", RUECKTARGETTEMP);
+        if (value != "")
+        {
+            settingsvar.RUECKTARGETTEMP = value.toFloat();
+            Serial.printf("RUECKTARGETTEMP: %f\n", settingsvar.RUECKTARGETTEMP);
+            commitSettings();
         }
         sendStatusJSON();
     });
     server.on("/setminp", []() {
         String value = "" + server.arg("value");
-        if (value != "") {
-            MINIMALPUMPDAUER = value.toFloat();
-            Serial.printf("MINIMALPUMPDAUER: %f\n", MINIMALPUMPDAUER);
+        if (value != "")
+        {
+            settingsvar.MINIMALPUMPDAUER = value.toFloat();
+            Serial.printf("MINIMALPUMPDAUER: %f\n", settingsvar.MINIMALPUMPDAUER);
+            commitSettings();
         }
         sendStatusJSON();
     });
     server.on("/setmaxp", []() {
         String value = "" + server.arg("value");
-        if (value != "") {
-            MAXIMALPUMPDAUER = value.toFloat();
-            Serial.printf("MAXIMALPUMPDAUER: %f\n", MAXIMALPUMPDAUER);
+        if (value != "")
+        {
+            settingsvar.MAXIMALPUMPDAUER = value.toFloat();
+            Serial.printf("MAXIMALPUMPDAUER: %f\n", settingsvar.MAXIMALPUMPDAUER);
+            commitSettings();
         }
         sendStatusJSON();
     });
     server.on("/setpumps", []() {
         String value = "" + server.arg("value");
-        if (value != "") {
-            PUMPENSCHUTZZEIT = value.toFloat();
-            Serial.printf("PUMPENSCHUTZZEIT: %f\n", PUMPENSCHUTZZEIT);
+        if (value != "")
+        {
+            settingsvar.PUMPENSCHUTZZEIT = value.toFloat();
+            Serial.printf("PUMPENSCHUTZZEIT: %f\n", settingsvar.PUMPENSCHUTZZEIT);
+            commitSettings();
         }
         sendStatusJSON();
     });
     server.on("/settdiff", []() {
         String value = "" + server.arg("value");
-        if (value != "") {
-            TARGETDIFFERENCE = value.toFloat();
-            Serial.printf("TARGETDIFFERENCE: %f\n", TARGETDIFFERENCE);
+        if (value != "")
+        {
+            settingsvar.TARGETDIFFERENCE = value.toFloat();
+            Serial.printf("TARGETDIFFERENCE: %f\n", settingsvar.TARGETDIFFERENCE);
+            commitSettings();
         }
         sendStatusJSON();
     });
@@ -573,9 +666,16 @@ void setup()
     Serial.println("HTTP server started");
 }
 
+
+// *************************************************
+// LOOP
+// *************************************************
 void loop()
 {
-    getTemperatures();
+    if (temperatures_refresh)
+    {
+        getTemperatures();
+    }
 
     statemachine();
 
