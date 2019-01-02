@@ -30,6 +30,7 @@ bool display_refresh = false;
 Ticker ticker_temperatures;
 bool temperatures_refresh = true;
 bool switch1_state;
+int display_state = 0;
 
 int working_mode = WMODEAUTO;      // Standardbetriebsmodus == AUTO
 int steering_mode = SMODEBASE;     // Steuerungsmodus == SMODEBASE
@@ -203,15 +204,48 @@ void updateDisplay()
     // Print relais mode
     if (switch1_state)
     {
-        display.drawString(128, 20, "<*>");
+        String icon = "";
+        if (display_state == 0) {
+            icon = "<->";
+        }
+        if (display_state == 1) {
+            icon = "<\\>";
+        }
+        if (display_state == 2) {
+            icon = "<|>";
+        }
+        if (display_state == 3) {
+            icon = "</>";
+        }
+        display_state++;
+        if (display_state > 3) {
+            display_state = 0;
+        }
+        display.drawString(128, 20, icon);
     }
     else
     {
-        display.drawString(128, 20, "< >");
+        display.drawString(128, 20, "<O>");
     }
 
     // Print steering mode
-    display.drawString(128, 40, String(steering_mode));
+    String stmode = "";
+    if (steering_mode == SMODEBASE) {
+        stmode = "Base";
+    }
+    if (steering_mode == SMODETIMERACTIVE) {
+        stmode = "WAct";
+    }
+    if (steering_mode == SMODEPUMPEAKTIV) {
+        stmode = "MinP";
+    }
+    if (steering_mode == SMODEPUMPENACHLAUF) {
+        stmode = "WTem";
+    }
+    if (steering_mode == SMODEPUMPENSCHUTZ) {
+        stmode = "Prot";
+    }
+    display.drawString(128, 40, stmode);
 
     display.display();
     display_refresh = false;
@@ -431,14 +465,6 @@ void sendStatusJSON()
     server.send(200, "application/json", response);
 }
 
-String getValueFromQuery()
-{
-    if (server.args() > 0)
-    {
-        return String(server.arg(0));
-    }
-}
-
 
 // *************************************************
 // SETUP
@@ -635,7 +661,7 @@ void setup()
         if (value != "")
         {
             settingsvar.MINIMALPUMPDAUER = value.toFloat();
-            Serial.printf("MINIMALPUMPDAUER: %f\n", settingsvar.MINIMALPUMPDAUER);
+            Serial.printf("MINIMALPUMPDAUER: %ld\n", settingsvar.MINIMALPUMPDAUER);
             commitSettings();
         }
         sendStatusJSON();
@@ -645,7 +671,7 @@ void setup()
         if (value != "")
         {
             settingsvar.MAXIMALPUMPDAUER = value.toFloat();
-            Serial.printf("MAXIMALPUMPDAUER: %f\n", settingsvar.MAXIMALPUMPDAUER);
+            Serial.printf("MAXIMALPUMPDAUER: %ld\n", settingsvar.MAXIMALPUMPDAUER);
             commitSettings();
         }
         sendStatusJSON();
@@ -655,7 +681,7 @@ void setup()
         if (value != "")
         {
             settingsvar.PUMPENSCHUTZZEIT = value.toFloat();
-            Serial.printf("PUMPENSCHUTZZEIT: %f\n", settingsvar.PUMPENSCHUTZZEIT);
+            Serial.printf("PUMPENSCHUTZZEIT: %ld\n", settingsvar.PUMPENSCHUTZZEIT);
             commitSettings();
         }
         sendStatusJSON();
