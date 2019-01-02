@@ -97,6 +97,15 @@ struct EEPROMSettingsStruct
     unsigned long PUMPENSCHUTZZEIT;
 } settingsvar;
 
+void setDefaultSettings() {
+    settingsvar.calc_mode = CALCMODETARGET;
+    settingsvar.RUECKTARGETTEMP = 35.0;
+    settingsvar.TARGETDIFFERENCE = 7.0;
+    settingsvar.MINIMALPUMPDAUER = 60000;   //  1 Minute
+    settingsvar.MAXIMALPUMPDAUER = 1200000; // 20 Minuten
+    settingsvar.PUMPENSCHUTZZEIT = 1800000; // 30 Minuten
+}
+
 
 // *************************************************
 // Helper functions
@@ -557,12 +566,7 @@ void setup()
     else
     {
         Serial.println("No EEPROM settings so far, using defaults.");
-        settingsvar.calc_mode = CALCMODETARGET;
-        settingsvar.RUECKTARGETTEMP = 35.0;
-        settingsvar.TARGETDIFFERENCE = 7.0;
-        settingsvar.MINIMALPUMPDAUER = 60000;   //  1 Minute
-        settingsvar.MAXIMALPUMPDAUER = 1200000; // 20 Minuten
-        settingsvar.PUMPENSCHUTZZEIT = 1800000; // 30 Minuten
+        setDefaultSettings();
     }
 
 
@@ -577,6 +581,11 @@ void setup()
     });
     server.on("/get", []() {
         sendStatusJSON();
+    });
+    server.on("/reset", []() {
+        setDefaultSettings();
+        server.send(200, "text/plain", "Settings set to defaults.");
+        commitSettings();
     });
     server.on("/setonce", []() {
         working_mode = WMODEONCE;
