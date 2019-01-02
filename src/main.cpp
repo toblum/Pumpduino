@@ -78,6 +78,12 @@ RCSwitch rc_switch = RCSwitch();
 #include <WiFiManager.h>
 
 // *************************************************
+// Init: ESPWebServer
+// *************************************************
+ESP8266WebServer server(80);
+
+
+// *************************************************
 // Helper functions
 // *************************************************
 
@@ -356,6 +362,33 @@ void statemachine()
     }
 }
 
+void sendStatusJSON() {
+    String response = "{";
+    response += "temp_vorlauf:" + String(temp_vorlauf) + ",";
+    response += "temp_ruecklauf:" + String(temp_ruecklauf) + ",";
+    response += "temp_raum:" + String(temp_raum) + ",";
+    response += "working_mode:" + String(working_mode) + ",";
+    response += "last_working_mode:" + String(last_working_mode) + ",";
+    response += "steering_mode:" + String(steering_mode) + ",";
+    response += "calc_mode:" + String(calc_mode) + ",";
+    response += "switch1_state:" + String(switch1_state) + ",";
+    response += "knock_state:0,";
+    response += "RUECKTARGETTEMP:" + String(RUECKTARGETTEMP) + ",";
+    response += "TARGETDIFFERENCE:" + String(TARGETDIFFERENCE) + ",";
+    response += "MINIMALPUMPDAUER:" + String(MINIMALPUMPDAUER) + ",";
+    response += "MAXIMALPUMPDAUER:" + String(MAXIMALPUMPDAUER) + ",";
+    response += "PUMPENSCHUTZZEIT:" + String(PUMPENSCHUTZZEIT) + "";
+    response += "}";
+    server.send(200, "application/json", response);
+}
+
+String getValueFromQuery() {
+    if (server.args() > 0) {
+        return String(server.arg(0));
+    }
+}
+
+
 void setup()
 {
     // start serial port
@@ -455,6 +488,89 @@ void setup()
     showMessage("Connected ...", getLocalIP(), "");
     WiFi.hostname("pumpduino");
     delay(2000);
+
+    // ========================================
+    // Initializing WebServer
+    // ========================================
+    server.onNotFound([]() {
+        server.send(404, "text/plain", "404 not found");
+    });
+    server.on("/", []() {
+        sendStatusJSON();
+    });
+    server.on("/get", []() {
+        sendStatusJSON();
+    });
+    server.on("/setonce", []() {
+        working_mode = WMODEONCE;
+        sendStatusJSON();
+    });
+    server.on("/seton", []() {
+        working_mode = WMODEON;
+        last_working_mode = working_mode;
+        sendStatusJSON();
+    });
+    server.on("/setoff", []() {
+        working_mode = WMODEOFF;
+        last_working_mode = working_mode;
+        sendStatusJSON();
+    });
+    server.on("/setauto", []() {
+        working_mode = WMODEAUTO;
+        last_working_mode = working_mode;
+        sendStatusJSON();
+    });
+    server.on("/setcalc", []() {
+        String value = "" + server.arg("value");
+        if (value != "") {
+            calc_mode = value.toInt();
+            Serial.printf("setcalc: %d\n", calc_mode);
+        }
+        sendStatusJSON();
+    });
+    server.on("/settt", []() {
+        String value = "" + server.arg("value");
+        if (value != "") {
+            RUECKTARGETTEMP = value.toFloat();
+            Serial.printf("RUECKTARGETTEMP: %f\n", RUECKTARGETTEMP);
+        }
+        sendStatusJSON();
+    });
+    server.on("/setminp", []() {
+        String value = "" + server.arg("value");
+        if (value != "") {
+            MINIMALPUMPDAUER = value.toFloat();
+            Serial.printf("MINIMALPUMPDAUER: %f\n", MINIMALPUMPDAUER);
+        }
+        sendStatusJSON();
+    });
+    server.on("/setmaxp", []() {
+        String value = "" + server.arg("value");
+        if (value != "") {
+            MAXIMALPUMPDAUER = value.toFloat();
+            Serial.printf("MAXIMALPUMPDAUER: %f\n", MAXIMALPUMPDAUER);
+        }
+        sendStatusJSON();
+    });
+    server.on("/setpumps", []() {
+        String value = "" + server.arg("value");
+        if (value != "") {
+            PUMPENSCHUTZZEIT = value.toFloat();
+            Serial.printf("PUMPENSCHUTZZEIT: %f\n", PUMPENSCHUTZZEIT);
+        }
+        sendStatusJSON();
+    });
+    server.on("/settdiff", []() {
+        String value = "" + server.arg("value");
+        if (value != "") {
+            TARGETDIFFERENCE = value.toFloat();
+            Serial.printf("TARGETDIFFERENCE: %f\n", TARGETDIFFERENCE);
+        }
+        sendStatusJSON();
+    });
+
+    server.begin();
+    Serial.println("HTTP server started");
 }
 
 void loop()
@@ -462,6 +578,8 @@ void loop()
     getTemperatures();
 
     statemachine();
+
+    server.handleClient();
 
     if (display_refresh)
     {
