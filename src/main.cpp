@@ -449,21 +449,22 @@ void commitSettings()
 void sendStatusJSON()
 {
     String response = "{";
-    response += "temp_vorlauf:" + String(temp_vorlauf) + ",";
-    response += "temp_ruecklauf:" + String(temp_ruecklauf) + ",";
-    response += "temp_raum:" + String(temp_raum) + ",";
-    response += "working_mode:" + String(working_mode) + ",";
-    response += "last_working_mode:" + String(last_working_mode) + ",";
-    response += "steering_mode:" + String(steering_mode) + ",";
-    response += "calc_mode:" + String(settingsvar.calc_mode) + ",";
-    response += "switch1_state:" + String(switch1_state) + ",";
-    response += "knock_state:0,";
-    response += "RUECKTARGETTEMP:" + String(settingsvar.RUECKTARGETTEMP) + ",";
-    response += "TARGETDIFFERENCE:" + String(settingsvar.TARGETDIFFERENCE) + ",";
-    response += "MINIMALPUMPDAUER:" + String(settingsvar.MINIMALPUMPDAUER) + ",";
-    response += "MAXIMALPUMPDAUER:" + String(settingsvar.MAXIMALPUMPDAUER) + ",";
-    response += "PUMPENSCHUTZZEIT:" + String(settingsvar.PUMPENSCHUTZZEIT) + "";
+    response += "\"temp_vorlauf\":" + String(temp_vorlauf) + ",";
+    response += "\"temp_ruecklauf\":" + String(temp_ruecklauf) + ",";
+    response += "\"temp_raum\":" + String(temp_raum) + ",";
+    response += "\"working_mode\":" + String(working_mode) + ",";
+    response += "\"last_working_mode\":" + String(last_working_mode) + ",";
+    response += "\"steering_mode\":" + String(steering_mode) + ",";
+    response += "\"calc_mode\":" + String(settingsvar.calc_mode) + ",";
+    response += "\"switch1_state\":" + String(switch1_state) + ",";
+    response += "\"knock_state\":0,";
+    response += "\"RUECKTARGETTEMP\":" + String(settingsvar.RUECKTARGETTEMP) + ",";
+    response += "\"TARGETDIFFERENCE\":" + String(settingsvar.TARGETDIFFERENCE) + ",";
+    response += "\"MINIMALPUMPDAUER\":" + String(settingsvar.MINIMALPUMPDAUER) + ",";
+    response += "\"MAXIMALPUMPDAUER\":" + String(settingsvar.MAXIMALPUMPDAUER) + ",";
+    response += "\"PUMPENSCHUTZZEIT\":" + String(settingsvar.PUMPENSCHUTZZEIT) + "";
     response += "}";
+    server.sendHeader("Access-Control-Allow-Origin","*");
     server.send(200, "application/json", response);
 }
 
@@ -856,7 +857,7 @@ void setup()
         }
         sendStatusJSON();
     });
-    server.on("/settdiff", []() {
+    server.on("/setdiff", []() {
         String value = "" + server.arg("value");
         if (value != "")
         {
