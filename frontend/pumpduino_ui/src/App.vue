@@ -2,7 +2,7 @@
   <v-app>
     <v-toolbar app>
       <v-toolbar-title class="headline text-uppercase">
-        <span>Pumpduino v2 UI</span>
+        <span>Pumpduino UI v2</span>
       </v-toolbar-title>
       <v-spacer></v-spacer>
       <v-btn
